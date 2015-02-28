@@ -234,8 +234,9 @@ struct pads_config {
 	bool fourscore_enabled;
 };
 
-// Buttons found on the SNES gamepad
-static const long btn_label[] = { BTN_B, BTN_Y, BTN_SELECT, BTN_START, BTN_A, BTN_X, BTN_TL, BTN_TR };
+// Buttons found on the NES and SNES gamepad
+static const long  nes_btn_label] = { BTN_A, BTN_B, BTN_SELECT, BTN_START };
+static const long snes_btn_label] = { BTN_B, BTN_Y, BTN_SELECT, BTN_START, BTN_A, BTN_X, BTN_TL, BTN_TR };
 
 // The order that the buttons of the SNES gamepad are stored in the byte string
 static const unsigned char btn_index[] = { 0, 1, 2, 3, 8, 9, 10, 11 };
@@ -409,7 +410,7 @@ static void pads_clear(struct pads_config *cfg, unsigned char n_devs) {
 	for(i = 0; i < n_devs; i++) {
 		dev = cfg->pad[(NUMBER_OF_INPUT_DEVICES - 1) - i];
 		for (j = 0; j < 8; j++) {
-			input_report_key(dev, btn_label[j], 0);
+			input_report_key(dev, snes_btn_labelj], 0);
 		}
 		input_report_abs(dev, ABS_X, 0);
 		input_report_abs(dev, ABS_Y, 0);
@@ -439,7 +440,7 @@ static void pads_update(struct pads_config *cfg) {
 		g = cfg->gpio[2];
 
 		for (j = 0; j < 8; j++) {
-			input_report_key(dev, btn_label[j], g & data[btn_index[j]]);
+			input_report_key(dev, snes_btn_labelj], g & data[btn_index[j]]);
 		}
 		input_report_abs(dev, ABS_X, !(g & data[6]) - !(g & data[7]));
 		input_report_abs(dev, ABS_Y, !(g & data[4]) - !(g & data[5]));
@@ -450,7 +451,7 @@ static void pads_update(struct pads_config *cfg) {
 		g = cfg->gpio[3];
 
 		for (j = 0; j < 8; j++) {
-			input_report_key(dev, btn_label[j], g & data[btn_index[j]]);
+			input_report_key(dev, snes_btn_labelj], g & data[btn_index[j]]);
 		}
 		input_report_abs(dev, ABS_X, !(g & data[6]) - !(g & data[7]));
 		input_report_abs(dev, ABS_Y, !(g & data[4]) - !(g & data[5]));
@@ -461,7 +462,7 @@ static void pads_update(struct pads_config *cfg) {
 		g = cfg->gpio[4];
 
 		for (j = 0; j < 8; j++) {
-			input_report_key(dev, btn_label[j], g & data[btn_index[j]]);
+			input_report_key(dev, snes_btn_labelj], g & data[btn_index[j]]);
 		}
 		input_report_abs(dev, ABS_X, !(g & data[6]) - !(g & data[7]));
 		input_report_abs(dev, ABS_Y, !(g & data[4]) - !(g & data[5]));
@@ -472,7 +473,7 @@ static void pads_update(struct pads_config *cfg) {
 		g = cfg->gpio[3];
 
 		for (j = 0; j < 8; j++) {
-			input_report_key(dev, btn_label[j], g & data[btn_index[j] + 17]);
+			input_report_key(dev, snes_btn_labelj], g & data[btn_index[j] + 17]);
 		}
 		input_report_abs(dev, ABS_X, !(g & data[23]) - !(g & data[24]));
 		input_report_abs(dev, ABS_Y, !(g & data[21]) - !(g & data[22]));
@@ -483,7 +484,7 @@ static void pads_update(struct pads_config *cfg) {
 		g = cfg->gpio[4];
 
 		for (j = 0; j < 8; j++) {
-			input_report_key(dev, btn_label[j], g & data[btn_index[j] + 17]);
+			input_report_key(dev, snes_btn_labelj], g & data[btn_index[j] + 17]);
 		}
 		input_report_abs(dev, ABS_X, !(g & data[23]) - !(g & data[24]));
 		input_report_abs(dev, ABS_Y, !(g & data[21]) - !(g & data[22]));
@@ -501,7 +502,7 @@ static void pads_update(struct pads_config *cfg) {
 				g = cfg->gpio[i + 2];
 	
 				for (j = 0; j < 4; j++) {
-					input_report_key(dev, btn_label[j], g & data[btn_index[j]]);
+					input_report_key(dev, nes_btn_label[j], g & data[btn_index[j]]);
 				}
 				input_report_abs(dev, ABS_X, !(g & data[6]) - !(g & data[7]));
 				input_report_abs(dev, ABS_Y, !(g & data[4]) - !(g & data[5]));
@@ -514,7 +515,7 @@ static void pads_update(struct pads_config *cfg) {
 				g = cfg->gpio[i];
 	
 				for (j = 0; j < 4; j++) {
-					input_report_key(dev, btn_label[j], g & data[btn_index[j] + 8]);
+					input_report_key(dev, nes_btn_label[j], g & data[btn_index[j] + 8]);
 				}
 				input_report_abs(dev, ABS_X, !(g & data[14]) - !(g & data[15]));
 				input_report_abs(dev, ABS_Y, !(g & data[12]) - !(g & data[13]));
@@ -529,20 +530,38 @@ static void pads_update(struct pads_config *cfg) {
 				cfg->player_mode = 4;
 			}
 		} else {
-			// NES or SNES gamepad
-	
 			// Player 1 and 2
-			for (i = 0; i < 2; i++) {
-				dev = cfg->pad[i];
-				g = cfg->gpio[i + 2];
 	
-				for (j = 0; j < 8; j++) {
-					input_report_key(dev, btn_label[j], g & data[btn_index[j]]);
+			// Check if a SNES gamepad is connected.
+			if(cfg->gpio[2] & data[16] == 1 || cfg->gpio[2] & data[16] == 1) {
+
+				// SNES
+				for (i = 0; i < 2; i++) {
+					dev = cfg->pad[i];
+					g = cfg->gpio[i + 2];
+					
+					for (j = 0; j < 8; j++) {
+						input_report_key(dev, snes_btn_label[j], g & data[btn_index[j]]);
+					}
+					input_report_abs(dev, ABS_X, !(g & data[6]) - !(g & data[7]));
+					input_report_abs(dev, ABS_Y, !(g & data[4]) - !(g & data[5]));
+					input_sync(dev);
 				}
-				input_report_abs(dev, ABS_X, !(g & data[6]) - !(g & data[7]));
-				input_report_abs(dev, ABS_Y, !(g & data[4]) - !(g & data[5]));
-				input_sync(dev);
-			}
+			} else {
+
+				// NES
+				for (i = 0; i < 2; i++) {
+					dev = cfg->pad[i];
+					g = cfg->gpio[i + 2];
+					
+					for (j = 0; j < 4; j++) {
+						input_report_key(dev, nes_btn_label[j], g & data[btn_index[j]]);
+					}
+					input_report_abs(dev, ABS_X, !(g & data[6]) - !(g & data[7]));
+					input_report_abs(dev, ABS_Y, !(g & data[4]) - !(g & data[5]));
+					input_sync(dev);
+				}
+
 	
 			// Check if virtual devices 3, 4 and 5 should be cleared and player_mode should be changed to 2 player mode
 			if (cfg->player_mode > 2) {
@@ -628,7 +647,7 @@ static int __init pads_setup(struct pads_config *cfg) {
 			}
             		
 			for (j = 0; j < 8; j++) {
-				__set_bit(btn_label[j], cfg->pad[i]->keybit);
+				__set_bit(snes_btn_labelj], cfg->pad[i]->keybit);
 			}
 			
 			status = input_register_device(cfg->pad[i]);
