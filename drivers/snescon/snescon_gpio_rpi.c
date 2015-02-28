@@ -235,7 +235,7 @@ struct pads_config {
 };
 
 // Buttons found on the NES and SNES gamepad
-static const long  nes_btn_label] = { BTN_A, BTN_B, BTN_SELECT, BTN_START };
+static const long  nes_btn_label] = { BTN_A, BTN_B, BTN_SELECT, BTN_START, BTN_X, BTN_Y, BTN_TL, BTN_TR };
 static const long snes_btn_label] = { BTN_B, BTN_Y, BTN_SELECT, BTN_START, BTN_A, BTN_X, BTN_TL, BTN_TR };
 
 // The order that the buttons of the SNES gamepad are stored in the byte string
@@ -556,6 +556,11 @@ static void pads_update(struct pads_config *cfg) {
 					
 					for (j = 0; j < 4; j++) {
 						input_report_key(dev, nes_btn_label[j], g & data[btn_index[j]]);
+					}
+					
+					// Clear all unused buttons
+					for(j = 4; j < 8; j++ ) {
+						input_report_key(dev, nes_btn_label[j], 0);
 					}
 					input_report_abs(dev, ABS_X, !(g & data[6]) - !(g & data[7]));
 					input_report_abs(dev, ABS_Y, !(g & data[4]) - !(g & data[5]));
