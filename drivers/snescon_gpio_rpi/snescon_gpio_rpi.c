@@ -40,7 +40,7 @@
  | | |_ |  ___/ | || |  | |
  | |__| | |    _| || |__| |
   \_____|_|   |_____\____/                            
-*/
+ */
 
 static volatile unsigned *gpio;	// I/O access.
 
@@ -203,13 +203,13 @@ static unsigned int gpio_get_bit(unsigned char g_id) {
   |  ___/ _` |/ _` / __|
   | |  | (_| | (_| \__ \
   |_|   \__,_|\__,_|___/
-*/
+ */
 
 #define DELAY 6
-#define BUFFER_SIZE 34
-#define BITS_LENGTH_MULTITAP 34
+#define BUFFER_SIZE 24
 #define BITS_LENGTH 24
-#define NUMBER_OF_GPIOS 6
+#define MAX_NUMBER_OF_GPIOS 7
+#define MIN_NUMBER_OF_GPIOS 3
 #define NUMBER_OF_INPUT_DEVICES 5
 
 /*
@@ -224,25 +224,26 @@ static unsigned int gpio_get_bit(unsigned char g_id) {
  *
  */
 struct pads_config {
-	unsigned int gpio[NUMBER_OF_GPIOS];
+	unsigned int gpio[MAX_NUMBER_OF_GPIOS];
 	struct input_dev *pad[NUMBER_OF_INPUT_DEVICES];
+	unsigned char n_pads;	// Number of connected pads.
+	unsigned char n_pad_gpios;	// Number of GPIOs allocated for gamepads.
 	unsigned char player_mode;
 	char *device_name;
 	int (* open) (struct input_dev *dev);
 	void (* close) (struct input_dev *dev);
-	bool multitap_enabled;
 	bool fourscore_enabled;
 };
 
 // Buttons found on the NES and SNES gamepad
-static const long  nes_btn_label] = { BTN_A, BTN_B, BTN_SELECT, BTN_START, BTN_X, BTN_Y, BTN_TL, BTN_TR };
-static const long snes_btn_label] = { BTN_B, BTN_Y, BTN_SELECT, BTN_START, BTN_A, BTN_X, BTN_TL, BTN_TR };
+static const long  nes_btn_label[] = { BTN_A, BTN_B, BTN_SELECT, BTN_START, BTN_X, BTN_Y, BTN_TL, BTN_TR };
+static const long snes_btn_label[] = { BTN_B, BTN_Y, BTN_SELECT, BTN_START, BTN_A, BTN_X, BTN_TL, BTN_TR };
 
 // The order that the buttons of the SNES gamepad are stored in the byte string
 static const unsigned char btn_index[] = { 0, 1, 2, 3, 8, 9, 10, 11 };
 
 /**
- * Read the data pins of all connected devices.
+ * Read data pins of all connected devices.
  *
  * @param cfg The pad configuration
  * @param data Array to store the read data in
@@ -267,139 +268,26 @@ static void pads_read(struct pads_config *cfg, unsigned int *data) {
 	}
 }
 
-/**
- * Read data pins of SNES Multitap and SNES pad connected to port 1.
- *
- * @param cfg The pad configuration
- * @param data Array to store the read data in
- */
-static void pads_read_multitap(struct pads_config *cfg, unsigned int *data) {
-	int i;
-	unsigned int clk, latch, pp;
-
-	clk = cfg->gpio[0];
-	latch = cfg->gpio[1];
-	pp = cfg->gpio[5];
-
-	gpio_set(clk | latch);
-	udelay(DELAY * 2);
-	gpio_clear(latch);
-
-	for (i = 0; i < BITS_LENGTH_MULTITAP / 2; i++) {
-		udelay (DELAY);
-		gpio_clear(clk);
-		data[i] = gpio_read_all();
-		udelay(DELAY);
-		gpio_set(clk);
-	}
-
-	// Set PP low
-	gpio_clear(pp);
-
-	for (; i < BITS_LENGTH_MULTITAP; i++) {
-		udelay (DELAY);
-		gpio_clear(clk);
-		data[i] = gpio_read_all();
-		udelay(DELAY);
-		gpio_set(clk);
-	}
-
-	// Set PP high
-	gpio_set(pp);
-}
 
 /**
- * Check if a SNES Multitap is connected.
- *
- * @param cfg The pad configuration
- * @return 1 if a SNES Multitap is connected, otherwise 0
- */
-static unsigned char multitap_connected(struct pads_config *cfg) {
-	int i;
-	unsigned char byte = 0;
-	unsigned int clk, latch, d0, d1;
-
-	// Store GPIOs in variables
-	clk = cfg->gpio[0];
-	latch = cfg->gpio[1];
-	d0 = cfg->gpio[3];
-	d1 = cfg->gpio[4];
-
-	// Set D0 to output
-	gpio_input(d0);
-	gpio_output(d0);
-
-	// Set D0 high
-	gpio_set(d0);
-	gpio_set(clk);
-	udelay (DELAY);
-
-	// Read D1 eight times
-	for (i = 0; i < 8; i++) {
-		udelay(DELAY);
-		gpio_clear(clk);
-
-		// Check if D1 is low
-		if (!gpio_read(d1)) {
-			return 0;
-		}
-		udelay(DELAY);
-		gpio_set(clk);
-	}
-
-	// Set D0 low
-	gpio_clear(d0);
-
-	// Read D1 eight times
-	for (i = 0; i < 8; i++) {
-		udelay(DELAY);
-		gpio_clear(clk);
-
-		// Check if D1 is high
-		if (gpio_read(d1)) {
-			byte += 1;
-		}
-		byte <<= 1;
-		udelay(DELAY);
-		gpio_set(clk);
-	}
-
-	// Set D0 to input
-	gpio_input(d0);
-
-	if (byte == 0xFF) {
-		return 0;
-	}
-	return 1;
-}
-
-/**
- * Check if a NES Four Score is connected.
+ * Check if a NES FourScore is connected.
  *
  * @param cfg The pad configuration
  * @return 1 if a NES Four Score is connected, otherwise 0
  */
 static unsigned char fourscore_connected(struct pads_config *cfg, unsigned int *data) {
-	return !(cfg->gpio[2] & data[16]) &&
-	       !(cfg->gpio[2] & data[17]) &&
-	       !(cfg->gpio[2] & data[18]) &&
-	        (cfg->gpio[2] & data[19]) &&
-	       !(cfg->gpio[2] & data[20]) &&
-	       !(cfg->gpio[2] & data[21]) &&
-	       !(cfg->gpio[2] & data[22]) &&
-	       !(cfg->gpio[2] & data[23]) &&
-	       !(cfg->gpio[3] & data[16]) &&
-	       !(cfg->gpio[3] & data[17]) &&
-	        (cfg->gpio[3] & data[18]) &&
-	       !(cfg->gpio[3] & data[19]) &&
-	       !(cfg->gpio[3] & data[20]) &&
-	       !(cfg->gpio[3] & data[21]) &&
-	       !(cfg->gpio[3] & data[22]) &&
-	       !(cfg->gpio[3] & data[23]);
+	return  !(cfg->gpio[2] & data[16]) && !(cfg->gpio[3] & data[16]) &&
+			!(cfg->gpio[2] & data[17]) && !(cfg->gpio[3] & data[17]) &&
+			!(cfg->gpio[2] & data[18]) &&  (cfg->gpio[3] & data[18]) &&
+			 (cfg->gpio[2] & data[19]) && !(cfg->gpio[3] & data[19]) &&
+			!(cfg->gpio[2] & data[20]) && !(cfg->gpio[3] & data[20]) &&
+			!(cfg->gpio[2] & data[21]) && !(cfg->gpio[3] & data[21]) &&
+			!(cfg->gpio[2] & data[22]) && !(cfg->gpio[3] & data[22]) &&
+			!(cfg->gpio[2] & data[23]) && !(cfg->gpio[3] & data[23]);
 }
 
 /**
- * Clear status of buttons and axises of pads not in use.
+ * Clear buttons and axises of unused pads.
  * 
  * @param cfg The pad configuration
  * @param n_devs Number of devices to have all buttons and axises cleared
@@ -408,9 +296,9 @@ static void pads_clear(struct pads_config *cfg, unsigned char n_devs) {
 	struct input_dev *dev;
 	int i, j;
 	for(i = 0; i < n_devs; i++) {
-		dev = cfg->pad[(NUMBER_OF_INPUT_DEVICES - 1) - i];
+		dev = cfg->pad[(cfg->n_pads - 1) - i];
 		for (j = 0; j < 8; j++) {
-			input_report_key(dev, snes_btn_labelj], 0);
+			input_report_key(dev, snes_btn_label[j], 0);
 		}
 		input_report_abs(dev, ABS_X, 0);
 		input_report_abs(dev, ABS_Y, 0);
@@ -425,154 +313,91 @@ static void pads_clear(struct pads_config *cfg, unsigned char n_devs) {
  */
 static void pads_update(struct pads_config *cfg) {
 	unsigned int g, data[BUFFER_SIZE];
-	unsigned char i, j;
+	unsigned char i, j, k;
 	struct input_dev *dev;
 
-	if (cfg->multitap_enabled && multitap_connected(cfg)) {
-		// SNES Multitap
-		pads_read_multitap(cfg, data);
-		
-		// Set 5 player mode
-		cfg->player_mode = 5;
+	pads_read(cfg, data);
 
-		// Player 1
-		dev = cfg->pad[0];
-		g = cfg->gpio[2];
+	if (cfg->fourscore_enabled && fourscore_connected(cfg, data)) {
+		// NES FourScore
 
-		for (j = 0; j < 8; j++) {
-			input_report_key(dev, snes_btn_labelj], g & data[btn_index[j]]);
+		// Player 1 and 2
+		for (i = 0; i < 2; i++) {
+			dev = cfg->pad[i];
+			g = cfg->gpio[i + 2];
+
+			for (j = 0; j < 4; j++) {
+				input_report_key(dev, nes_btn_label[j], g & data[btn_index[j]]);
+			}
+			input_report_abs(dev, ABS_X, !(g & data[6]) - !(g & data[7]));
+			input_report_abs(dev, ABS_Y, !(g & data[4]) - !(g & data[5]));
+			input_sync(dev);
 		}
-		input_report_abs(dev, ABS_X, !(g & data[6]) - !(g & data[7]));
-		input_report_abs(dev, ABS_Y, !(g & data[4]) - !(g & data[5]));
-		input_sync(dev);
 
-		// Player 2
-		dev = cfg->pad[1];
-		g = cfg->gpio[3];
+		// Player 3 and 4
+		for (i = 2; i < 4; i++) {
+			dev = cfg->pad[i];
+			g = cfg->gpio[i];
 
-		for (j = 0; j < 8; j++) {
-			input_report_key(dev, snes_btn_labelj], g & data[btn_index[j]]);
+			for (j = 0; j < 4; j++) {
+				input_report_key(dev, nes_btn_label[j], g & data[btn_index[j] + 8]);
+			}
+			input_report_abs(dev, ABS_X, !(g & data[14]) - !(g & data[15]));
+			input_report_abs(dev, ABS_Y, !(g & data[12]) - !(g & data[13]));
+			input_sync(dev);
 		}
-		input_report_abs(dev, ABS_X, !(g & data[6]) - !(g & data[7]));
-		input_report_abs(dev, ABS_Y, !(g & data[4]) - !(g & data[5]));
-		input_sync(dev);
 
-		// Player 3
-		dev = cfg->pad[2];
-		g = cfg->gpio[4];
-
-		for (j = 0; j < 8; j++) {
-			input_report_key(dev, snes_btn_labelj], g & data[btn_index[j]]);
+		// Check if any device should be cleared and if player_mode should be changed to 4 player mode.
+		if (cfg->player_mode > 4) {
+			cfg->player_mode = 4;
+			pads_clear(cfg, 1);
+		} else if (cfg->player_mode < 4) {
+			cfg->player_mode = 4;
 		}
-		input_report_abs(dev, ABS_X, !(g & data[6]) - !(g & data[7]));
-		input_report_abs(dev, ABS_Y, !(g & data[4]) - !(g & data[5]));
-		input_sync(dev);
-
-		// Player 4
-		dev = cfg->pad[3];
-		g = cfg->gpio[3];
-
-		for (j = 0; j < 8; j++) {
-			input_report_key(dev, snes_btn_labelj], g & data[btn_index[j] + 17]);
-		}
-		input_report_abs(dev, ABS_X, !(g & data[23]) - !(g & data[24]));
-		input_report_abs(dev, ABS_Y, !(g & data[21]) - !(g & data[22]));
-		input_sync(dev);
-
-		// Player 5
-		dev = cfg->pad[4];
-		g = cfg->gpio[4];
-
-		for (j = 0; j < 8; j++) {
-			input_report_key(dev, snes_btn_labelj], g & data[btn_index[j] + 17]);
-		}
-		input_report_abs(dev, ABS_X, !(g & data[23]) - !(g & data[24]));
-		input_report_abs(dev, ABS_Y, !(g & data[21]) - !(g & data[22]));
-		input_sync(dev);
-
 	} else {
-		pads_read(cfg, data);
-	
-		if (cfg->fourscore_enabled && fourscore_connected(cfg, data)) {
-			// NES Four Score
-	
-			// Player 1 and 2
-			for (i = 0; i < 2; i++) {
-				dev = cfg->pad[i];
-				g = cfg->gpio[i + 2];
-	
-				for (j = 0; j < 4; j++) {
-					input_report_key(dev, nes_btn_label[j], g & data[btn_index[j]]);
+
+		// Update all gamepads.
+		for (i = 0; i < cfg->n_pad_gpios; i++) {
+
+			dev = cfg->pad[i];
+			g = cfg->gpio[i + 2];
+
+			// Check if current gamepad is of type SNES.
+			if((g & data[16]) == 1) {
+
+				// SNES gamepad
+
+				// Update all SNES buttons.
+				for (j = 0; j < 8; j++) {
+					input_report_key(dev, snes_btn_label[j], g & data[btn_index[j]]);
 				}
 				input_report_abs(dev, ABS_X, !(g & data[6]) - !(g & data[7]));
 				input_report_abs(dev, ABS_Y, !(g & data[4]) - !(g & data[5]));
 				input_sync(dev);
-			}
-	
-			// Player 3 and 4
-			for (i = 2; i < 4; i++) {
-				dev = cfg->pad[i];
-				g = cfg->gpio[i];
-	
-				for (j = 0; j < 4; j++) {
-					input_report_key(dev, nes_btn_label[j], g & data[btn_index[j] + 8]);
-				}
-				input_report_abs(dev, ABS_X, !(g & data[14]) - !(g & data[15]));
-				input_report_abs(dev, ABS_Y, !(g & data[12]) - !(g & data[13]));
-				input_sync(dev);
-			}
-			
-			// Check if virtual device 5 should be cleared and if player_mode should be changed to 4 player mode
-			if (cfg->player_mode > 4) {
-				cfg->player_mode = 4;
-				pads_clear(cfg, 1);
-			} else if (cfg->player_mode < 4) {
-				cfg->player_mode = 4;
-			}
-		} else {
-			// Player 1 and 2
-	
-			// Check if a SNES gamepad is connected.
-			if(cfg->gpio[2] & data[16] == 1 || cfg->gpio[2] & data[16] == 1) {
-
-				// SNES
-				for (i = 0; i < 2; i++) {
-					dev = cfg->pad[i];
-					g = cfg->gpio[i + 2];
-					
-					for (j = 0; j < 8; j++) {
-						input_report_key(dev, snes_btn_label[j], g & data[btn_index[j]]);
-					}
-					input_report_abs(dev, ABS_X, !(g & data[6]) - !(g & data[7]));
-					input_report_abs(dev, ABS_Y, !(g & data[4]) - !(g & data[5]));
-					input_sync(dev);
-				}
 			} else {
 
-				// NES
-				for (i = 0; i < 2; i++) {
-					dev = cfg->pad[i];
-					g = cfg->gpio[i + 2];
-					
-					for (j = 0; j < 4; j++) {
-						input_report_key(dev, nes_btn_label[j], g & data[btn_index[j]]);
-					}
-					
-					// Clear all unused buttons
-					for(j = 4; j < 8; j++ ) {
-						input_report_key(dev, nes_btn_label[j], 0);
-					}
-					input_report_abs(dev, ABS_X, !(g & data[6]) - !(g & data[7]));
-					input_report_abs(dev, ABS_Y, !(g & data[4]) - !(g & data[5]));
-					input_sync(dev);
+				// NES gamepad
+
+				// Update all NES buttons.
+				for (j = 0; j < 4; j++) {
+					input_report_key(dev, nes_btn_label[j], g & data[btn_index[j]]);
 				}
 
-	
-			// Check if virtual devices 3, 4 and 5 should be cleared and player_mode should be changed to 2 player mode
-			if (cfg->player_mode > 2) {
-				cfg->player_mode = 2;
-				pads_clear(cfg, 3);
+				// Clear all unused SNES buttons,
+				for(j = 4; j < 8; j++ ) {
+					input_report_key(dev, nes_btn_label[j], 0);
+				}
+				input_report_abs(dev, ABS_X, !(g & data[6]) - !(g & data[7]));
+				input_report_abs(dev, ABS_Y, !(g & data[4]) - !(g & data[5]));
+				input_sync(dev);
+
 			}
+		}
+
+		// Check if any devices should be cleared and player_mode updated.
+		if (cfg->player_mode > cfg->n_pad_gpios) {
+			cfg->player_mode = cfg->n_pad_gpios;
+			pads_clear(cfg, cfg->n_pads - cfg->n_pad_gpios);
 		}
 	}
 }
@@ -590,14 +415,14 @@ static void __init pads_setup_gpio(struct pads_config *cfg) {
 		bit = cfg->gpio[i];
 		gpio_output(bit);
 	}
-	
+
 	// Setup GPIO for port1_d0, port2_d0, port2_d1
 	for(i = 2; i < 5; i++) {
 		bit = cfg->gpio[i];
 		gpio_input(bit);
 		gpio_enable_pull_up(bit);
 	}
-	
+
 	// Setup GPIO for port1_pp
 	bit = cfg->gpio[5];
 	gpio_input(bit);
@@ -613,7 +438,7 @@ static int __init pads_setup(struct pads_config *cfg) {
 	int i, j;
 	int status = 0;
 
-	for (i = 0; (i < NUMBER_OF_INPUT_DEVICES) && (0 == status); ++i) {
+	for (i = 0; (i < cfg->n_pads) && (status == 0); ++i) {
 		cfg->pad[i] = input_allocate_device();
 		if (!cfg->pad[i]) {
 			pr_err("Not enough memory for input device!\n");
@@ -628,7 +453,7 @@ static int __init pads_setup(struct pads_config *cfg) {
 				status = -ENOMEM;
 			} else {
 				// Create the device path name in userspace.
-				snprintf(phys, BUFFER_SIZE, "input%d", i);
+				snprintf(phys, BUFFER_SIZE, "input_%d", i);
 				cfg->pad[i]->phys = phys;
 			}
 		}
@@ -640,21 +465,21 @@ static int __init pads_setup(struct pads_config *cfg) {
 			cfg->pad[i]->id.vendor = 0x0001;
 			cfg->pad[i]->id.product = 1;
 			cfg->pad[i]->id.version = 0x0100;
-    
+
 			input_set_drvdata(cfg->pad[i], cfg);
-    
+
 			cfg->pad[i]->open = cfg->open;
 			cfg->pad[i]->close = cfg->close;
 			cfg->pad[i]->evbit[0] = BIT_MASK(EV_KEY) | BIT_MASK(EV_ABS);
-        
+
 			for (j = 0; j < 2; j++) {
 				input_set_abs_params(cfg->pad[i], ABS_X + j, -1, 1, 0, 0);
 			}
-            		
+
 			for (j = 0; j < 8; j++) {
-				__set_bit(snes_btn_labelj], cfg->pad[i]->keybit);
+				__set_bit(snes_btn_label[j], cfg->pad[i]->keybit);
 			}
-			
+
 			status = input_register_device(cfg->pad[i]);
 			if (status != 0) {
 				pr_err("Could not register device no %i.\n", i);
@@ -670,18 +495,18 @@ static int __init pads_setup(struct pads_config *cfg) {
 		// Setup the GPIO pins
 		pads_setup_gpio(cfg);
 	}
-    
+
 	return status;
 }
 
 static void __exit pads_remove(struct pads_config *cfg) {
-	int idx;
+	int i;
 
-	for (idx = 0; idx < NUMBER_OF_INPUT_DEVICES; idx++) {
-		if (cfg->pad[idx]) {
-			char *phys = (char*)cfg->pad[idx]->phys;
-			input_unregister_device(cfg->pad[idx]);
-			cfg->pad[idx] = NULL;
+	for (i = 0; i < cfg->n_pads; i++) {
+		if (cfg->pad[i]) {
+			char *phys = (char*)cfg->pad[i]->phys;
+			input_unregister_device(cfg->pad[i]);
+			cfg->pad[i] = NULL;
 			kfree(phys);
 		}
 	}
@@ -693,7 +518,7 @@ static void __exit pads_remove(struct pads_config *cfg) {
   | |    | | '_ \| | | \ \/ /  | |/ / _ \ '__| '_ \ / _ \ |
   | |____| | | | | |_| |>  <   |   <  __/ |  | | | |  __/ |
   |______|_|_| |_|\__,_/_/\_\  |_|\_\___|_|  |_| |_|\___|_|
-*/
+ */
 
 #define REFRESH_TIME HZ/100
 
@@ -706,22 +531,22 @@ MODULE_VERSION("1.0.0");
 /*
  * Structure that contain pads configuration, timer and mutex.
  */
-struct snescon_config {
+struct driver_config {
 	struct pads_config pads_cfg;
 	struct timer_list timer;
 	struct mutex mutex;
 	int driver_usage_cnt;
-	unsigned int gpio_id[NUMBER_OF_GPIOS];
-	unsigned int gpio_id_cnt; // Counter used in communication with userspace. Should be set to NUMBER_OF_GPIOS if parameter gpio_id is valid.
+	unsigned int gpio_id[MAX_NUMBER_OF_GPIOS];
+	unsigned int gpio_id_cnt; // Counter used in communication with userspace. Should be set to MAX_NUMBER_OF_GPIOS if parameter gpio_id is valid.
 };
 
 /**
  * Timer that read and update all pads.
  * 
- * @param ptr The pointer to the snescon_config structure
+ * @param ptr The pointer to the driver_config structure
  */
-static void snescon_timer(unsigned long ptr) {
-	struct snescon_config* cfg = (void *) ptr;
+static void driver_timer(unsigned long ptr) {
+	struct driver_config* cfg = (void *) ptr;
 	pads_update(&(cfg->pads_cfg));
 	mod_timer(&cfg->timer, jiffies + REFRESH_TIME);
 }
@@ -730,8 +555,8 @@ static void snescon_timer(unsigned long ptr) {
  * @brief Open function for the driver.
  * Enables the 
  */
-static int snescon_open(struct input_dev* dev) {
-	struct snescon_config* cfg = input_get_drvdata(dev);
+static int driver_open(struct input_dev* dev) {
+	struct driver_config* cfg = input_get_drvdata(dev);
 	int status;
 
 	status = mutex_lock_interruptible(&cfg->mutex);
@@ -753,8 +578,8 @@ static int snescon_open(struct input_dev* dev) {
  * @brief Close function for the driver.
  * Disables the timer if the last device are closed.
  */
-static void snescon_close(struct input_dev* dev) {
-	struct snescon_config* cfg = input_get_drvdata(dev);
+static void driver_close(struct input_dev* dev) {
+	struct driver_config* cfg = input_get_drvdata(dev);
 
 	mutex_lock(&cfg->mutex);
 	cfg->driver_usage_cnt--;
@@ -769,56 +594,72 @@ static void snescon_close(struct input_dev* dev) {
  * Module global parameter variable.
  *
  */
-static struct snescon_config snescon_config = {
-	.gpio_id = {2, 3, 4, 7, 10, 11}, // Default values for the GPIOs.
-	.gpio_id_cnt = NUMBER_OF_GPIOS,
-	.pads_cfg.device_name = "SNES pad",
-	.pads_cfg.open = &snescon_open,
-	.pads_cfg.close = &snescon_close,
-	.pads_cfg.multitap_enabled = 0,
-	.pads_cfg.fourscore_enabled = 0,
+static struct driver_config driver_config = {
+		.gpio_id = {2, 3, 4, 7, 9, 10, 11}, // Default values for the GPIOs.
+		.gpio_id_cnt = MAX_NUMBER_OF_GPIOS,
+		.pads_cfg.device_name = "SNES pad",
+		.pads_cfg.open = &driver_open,
+		.pads_cfg.close = &driver_close,
+		.pads_cfg.fourscore_enabled = 0,
 };
 
 /**
  * @brief Definition of module parameter gpio. This parameter are readable from the sysfs.
  */
-module_param_array_named(gpio, snescon_config.gpio_id, uint, &(snescon_config.gpio_id_cnt), S_IRUGO);
-MODULE_PARM_DESC(gpio, "Mapping of the 6 gpio for the driver are as follow: <clk, latch, port1_d0 (data1), port2_d0 (data2), port2_d1 (data4), port2_pp (data6)>");
+module_param_array_named(gpio, driver_config.gpio_id, uint, &(driver_config.gpio_id_cnt), S_IRUGO);
+MODULE_PARM_DESC(gpio, "Mapping of the gpios for the driver are as follows: < clk, latch, pad_1, pad_2, pad_3, pad_4, pad_5 >");
 
-/**
- * @brief Definition of module parameter multitap_enabled. This parameter are readable and writable from the sysfs.
- */
-module_param_named(multitap, snescon_config.pads_cfg.multitap_enabled, bool, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(multitap, "Enable/disable multitap. (Disabled by default.)");
 
 /**
  * @brief Definition of module parameter fourscore_enabled. This parameter are readable and writable from the sysfs.
  */
-module_param_named(fourscore, snescon_config.pads_cfg.fourscore_enabled, bool, S_IRUGO | S_IWUSR);
+module_param_named(fourscore, driver_config.pads_cfg.fourscore_enabled, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(en_fourscore, "Enable/disable fourscore. (Disabled by default.)");
 
 /**
  * Init function for the driver.
  */
-static int __init snescon_init(void) {
+static int __init driver_init(void) {
 	unsigned int i;
 	unsigned int status = 0;
-	
-	// Check if the supplied GPIO setting are useful. All GPIOs must be set for the configuration to be prevalid.
-	if (snescon_config.gpio_id_cnt != NUMBER_OF_GPIOS) {
-		pr_err("Number of GPIO pins in gpio configuration is not correct. Expected %i, actual %i\n", NUMBER_OF_GPIOS, snescon_config.gpio_id_cnt);
+
+	// Check if the supplied GPIO setting are useful. The minimum number of GPIOs must be set for the configuration to be prevalid.
+	if (driver_config.gpio_id_cnt < MIN_NUMBER_OF_GPIOS) {
+		pr_err("Number of GPIO pins in gpio configuration is not correct. Expected at least %i, found %i\n", MIN_NUMBER_OF_GPIOS, driver_config.gpio_id_cnt);
+		return -EINVAL;
+	}
+
+	// Check if the supplied GPIO setting are useful. At max 7 GPIOs can be set for the configuration to be prevalid.
+	if (driver_config.gpio_id_cnt > MAX_NUMBER_OF_GPIOS) {
+		pr_err("Number of GPIO pins in gpio configuration is not correct. Expected at most %i, found %i\n", MAX_NUMBER_OF_GPIOS, driver_config.gpio_id_cnt);
+		return -EINVAL;
+	}
+
+	// Check that the minimum amount GPIOs for using the FourScore, if enabled, are supplied.
+	if (driver_config.pads_cfg.fourscore_enabled && driver_config.gpio_id_cnt < (MIN_NUMBER_OF_GPIOS + 1)) {
+		pr_err("Number of GPIO pins in gpio configuration is not correct. Expected at least %i in order to use the FourScore adapter, found %i\n", MIN_NUMBER_OF_GPIOS + 1, driver_config.gpio_id_cnt);
 		return -EINVAL;
 	}
 
 	// Final validation of the provided configuration.
-	if (!gpio_list_valid(snescon_config.gpio_id, snescon_config.gpio_id_cnt)) {
-		pr_err("One of the GPIO pins in the configuration are not valid!\n");
+	if (!gpio_list_valid(driver_config.gpio_id, driver_config.gpio_id_cnt)) {
+		pr_err("At least one of the GPIO pins in the configuration are not valid!\n");
 		return -EINVAL;
 	}
 
+	// Store how many pads the user have setup.
+	if(driver_config.pads_cfg.fourscore_enabled && driver_config.gpio_id_cnt < 4) {
+		driver_config.pads_cfg.n_pads = 4;
+	} else {
+		driver_config.pads_cfg.n_pads = driver_config.gpio_id_cnt - 2;
+	}
+
+	// Store how many GPIOs that are used for data pins.
+	driver_config.pads_cfg.n_pad_gpios = driver_config.gpio_id_cnt - 2;
+
 	// Fill in the gpio struct with bit values.
-	for (i = 0; i < NUMBER_OF_GPIOS; ++i) {
-		snescon_config.pads_cfg.gpio[i] = gpio_get_bit(snescon_config.gpio_id[i]);
+	for (i = 0; i < driver_config.gpio_id_cnt; ++i) {
+		driver_config.pads_cfg.gpio[i] = gpio_get_bit(driver_config.gpio_id[i]);
 	}
 
 	// Set up the gpio handler.
@@ -827,7 +668,7 @@ static int __init snescon_init(void) {
 		return -EBUSY;
 	}
 
-	status = pads_setup(&snescon_config.pads_cfg);
+	status = pads_setup(&driver_config.pads_cfg);
 	if (status != 0) {
 		pr_err("Setup of input_device failed!\n");
 
@@ -838,9 +679,9 @@ static int __init snescon_init(void) {
 	}
 
 	// Initiate the mutex and the timer
-	mutex_init(&snescon_config.mutex);
-	setup_timer(&snescon_config.timer, snescon_timer, (long) &snescon_config);
-	
+	mutex_init(&driver_config.mutex);
+	setup_timer(&driver_config.timer, driver_timer, (long) &driver_config);
+
 	pr_info("Loaded driver\n");
 
 	return 0;
@@ -849,14 +690,14 @@ static int __init snescon_init(void) {
 /**
  * Exit function for the driver.
  */
-static void __exit snescon_exit(void) {
-	del_timer(&snescon_config.timer);
-	pads_remove(&snescon_config.pads_cfg);
-	mutex_destroy(&snescon_config.mutex);
+static void __exit driver_exit(void) {
+	del_timer(&driver_config.timer);
+	pads_remove(&driver_config.pads_cfg);
+	mutex_destroy(&driver_config.mutex);
 	gpio_exit();
 
 	pr_info("driver exit\n");
 }
 
-module_init (snescon_init);
-module_exit (snescon_exit);
+module_init (driver_init);
+module_exit (driver_exit);
