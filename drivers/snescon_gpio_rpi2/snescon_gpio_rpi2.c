@@ -1,5 +1,5 @@
 /*
- * NES, SNES, gamepad driver for Raspberry Pi
+ * NES, SNES, gamepad driver for Raspberry Pi 2
  *
  *  Copyright (c) 2014	Christian Isaksson
  *  Copyright (c) 2014	Karl Thoren <karl.h.thoren@gmail.com>
@@ -51,11 +51,11 @@ static volatile unsigned *gpio;	// I/O access.
 #define GPIO_SET *(gpio + 7)	// Sets bits which are 1 and ignores bits which are 0.
 #define GPIO_CLR *(gpio + 10)	// Clears bits which are 1 and ignores bits which are 0.
 
-#define BCM2708_PERI_BASE        0x20000000
-#define GPIO_BASE                (BCM2708_PERI_BASE + 0x200000) // GPIO controller.
+#define BCM2836_PERI_BASE        0x3F000000
+#define GPIO_BASE                (BCM2836_PERI_BASE + 0x200000) // GPIO controller.
 
 /*
- * All valid GPIOs found on the Raspberry Pi P1 Header.
+ * All valid GPIOs found on the Raspberry Pi 2 J8 Header.
  */
 static const unsigned char all_valid_gpio[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27 };
 
