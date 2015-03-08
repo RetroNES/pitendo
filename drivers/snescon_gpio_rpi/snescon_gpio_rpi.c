@@ -530,11 +530,11 @@ MODULE_VERSION("1.0.0");
 /*
  * Structure that contain pads configuration, timer and mutex.
  */
-struct driver_config {
+struct snescon_config {
 	struct pads_config pads_cfg;
 	struct timer_list timer;
 	struct mutex mutex;
-	int driver_usage_cnt;
+	int snescon_usage_cnt;
 	unsigned int gpio_id[MAX_NUMBER_OF_GPIOS];
 	unsigned int gpio_id_cnt; // Counter used in communication with userspace. Should be set to MAX_NUMBER_OF_GPIOS if parameter gpio_id is valid.
 };
@@ -542,10 +542,10 @@ struct driver_config {
 /**
  * Timer that read and update all pads.
  * 
- * @param ptr The pointer to the driver_config structure
+ * @param ptr The pointer to the snescon_config structure
  */
-static void driver_timer(unsigned long ptr) {
-	struct driver_config* cfg = (void *) ptr;
+static void snescon_timer(unsigned long ptr) {
+	struct snescon_config* cfg = (void *) ptr;
 	pads_update(&(cfg->pads_cfg));
 	mod_timer(&cfg->timer, jiffies + REFRESH_TIME);
 }
@@ -554,8 +554,8 @@ static void driver_timer(unsigned long ptr) {
  * @brief Open function for the driver.
  * Enables the 
  */
-static int driver_open(struct input_dev* dev) {
-	struct driver_config* cfg = input_get_drvdata(dev);
+static int snescon_open(struct input_dev* dev) {
+	struct snescon_config* cfg = input_get_drvdata(dev);
 	int status;
 
 	status = mutex_lock_interruptible(&cfg->mutex);
@@ -563,8 +563,8 @@ static int driver_open(struct input_dev* dev) {
 		return status;
 	}
 
-	cfg->driver_usage_cnt++;
-	if (cfg->driver_usage_cnt > 0) {
+	cfg->snescon_usage_cnt++;
+	if (cfg->snescon_usage_cnt > 0) {
 		// Atleast one device open. Start the timer or reset the timeout.
 		mod_timer(&cfg->timer, jiffies + REFRESH_TIME);
 	}
@@ -577,12 +577,12 @@ static int driver_open(struct input_dev* dev) {
  * @brief Close function for the driver.
  * Disables the timer if the last device are closed.
  */
-static void driver_close(struct input_dev* dev) {
-	struct driver_config* cfg = input_get_drvdata(dev);
+static void snescon_close(struct input_dev* dev) {
+	struct snescon_config* cfg = input_get_drvdata(dev);
 
 	mutex_lock(&cfg->mutex);
-	cfg->driver_usage_cnt--;
-	if (cfg->driver_usage_cnt <= 0) {
+	cfg->snescon_usage_cnt--;
+	if (cfg->snescon_usage_cnt <= 0) {
 		// Last device closed. Disable the timer.
 		del_timer_sync(&cfg->timer);
 	}
@@ -593,72 +593,72 @@ static void driver_close(struct input_dev* dev) {
  * Module global parameter variable.
  *
  */
-static struct driver_config driver_config = {
+static struct snescon_config snescon_config = {
 		.gpio_id = {2, 3, 4, 7, 9, 10, 11}, // Default values for the GPIOs.
 		.gpio_id_cnt = MAX_NUMBER_OF_GPIOS,
 		.pads_cfg.device_name = "SNES pad",
-		.pads_cfg.open = &driver_open,
-		.pads_cfg.close = &driver_close,
+		.pads_cfg.open = &snescon_open,
+		.pads_cfg.close = &snescon_close,
 		.pads_cfg.fourscore_enabled = 0,
 };
 
 /**
  * @brief Definition of module parameter gpio. This parameter are readable from the sysfs.
  */
-module_param_array_named(gpio, driver_config.gpio_id, uint, &(driver_config.gpio_id_cnt), S_IRUGO);
+module_param_array_named(gpio, snescon_config.gpio_id, uint, &(snescon_config.gpio_id_cnt), S_IRUGO);
 MODULE_PARM_DESC(gpio, "Mapping of the gpios for the driver are as follows: < clk, latch, pad_1, pad_2, pad_3, pad_4, pad_5 >");
 
 
 /**
  * @brief Definition of module parameter fourscore_enabled. This parameter are readable and writable from the sysfs.
  */
-module_param_named(fourscore, driver_config.pads_cfg.fourscore_enabled, bool, S_IRUGO | S_IWUSR);
+module_param_named(fourscore, snescon_config.pads_cfg.fourscore_enabled, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(en_fourscore, "Enable/disable fourscore. (Disabled by default.)");
 
 /**
  * Init function for the driver.
  */
-static int __init driver_init(void) {
+static int __init snescon_init(void) {
 	unsigned int i;
 	unsigned int status = 0;
 
 	// Check if the supplied GPIO setting are useful. The minimum number of GPIOs must be set for the configuration to be prevalid.
-	if (driver_config.gpio_id_cnt < MIN_NUMBER_OF_GPIOS) {
-		pr_err("Number of GPIO pins in gpio configuration is not correct. Expected at least %i, found %i\n", MIN_NUMBER_OF_GPIOS, driver_config.gpio_id_cnt);
+	if (snescon_config.gpio_id_cnt < MIN_NUMBER_OF_GPIOS) {
+		pr_err("Number of GPIO pins in gpio configuration is not correct. Expected at least %i, found %i\n", MIN_NUMBER_OF_GPIOS, snescon_config.gpio_id_cnt);
 		return -EINVAL;
 	}
 
 	// Check if the supplied GPIO setting are useful. At max 7 GPIOs can be set for the configuration to be prevalid.
-	if (driver_config.gpio_id_cnt > MAX_NUMBER_OF_GPIOS) {
-		pr_err("Number of GPIO pins in gpio configuration is not correct. Expected at most %i, found %i\n", MAX_NUMBER_OF_GPIOS, driver_config.gpio_id_cnt);
+	if (snescon_config.gpio_id_cnt > MAX_NUMBER_OF_GPIOS) {
+		pr_err("Number of GPIO pins in gpio configuration is not correct. Expected at most %i, found %i\n", MAX_NUMBER_OF_GPIOS, snescon_config.gpio_id_cnt);
 		return -EINVAL;
 	}
 
 	// Check that the minimum amount GPIOs for using the FourScore, if enabled, are supplied.
-	if (driver_config.pads_cfg.fourscore_enabled && driver_config.gpio_id_cnt < (MIN_NUMBER_OF_GPIOS + 1)) {
-		pr_err("Number of GPIO pins in gpio configuration is not correct. Expected at least %i in order to use the FourScore adapter, found %i\n", MIN_NUMBER_OF_GPIOS + 1, driver_config.gpio_id_cnt);
+	if (snescon_config.pads_cfg.fourscore_enabled && snescon_config.gpio_id_cnt < (MIN_NUMBER_OF_GPIOS + 1)) {
+		pr_err("Number of GPIO pins in gpio configuration is not correct. Expected at least %i in order to use the FourScore adapter, found %i\n", MIN_NUMBER_OF_GPIOS + 1, snescon_config.gpio_id_cnt);
 		return -EINVAL;
 	}
 
 	// Final validation of the provided configuration.
-	if (!gpio_list_valid(driver_config.gpio_id, driver_config.gpio_id_cnt)) {
+	if (!gpio_list_valid(snescon_config.gpio_id, snescon_config.gpio_id_cnt)) {
 		pr_err("At least one of the GPIO pins in the configuration are not valid!\n");
 		return -EINVAL;
 	}
 
 	// Store how many pads the user have setup.
-	if(driver_config.pads_cfg.fourscore_enabled && driver_config.gpio_id_cnt < 4) {
-		driver_config.pads_cfg.n_pads = 4;
+	if(snescon_config.pads_cfg.fourscore_enabled && snescon_config.gpio_id_cnt < 4) {
+		snescon_config.pads_cfg.n_pads = 4;
 	} else {
-		driver_config.pads_cfg.n_pads = driver_config.gpio_id_cnt - 2;
+		snescon_config.pads_cfg.n_pads = snescon_config.gpio_id_cnt - 2;
 	}
 
 	// Store how many GPIOs that are used for data pins.
-	driver_config.pads_cfg.n_pad_gpios = driver_config.gpio_id_cnt - 2;
+	snescon_config.pads_cfg.n_pad_gpios = snescon_config.gpio_id_cnt - 2;
 
 	// Fill in the gpio struct with bit values.
-	for (i = 0; i < driver_config.gpio_id_cnt; ++i) {
-		driver_config.pads_cfg.gpio[i] = gpio_get_bit(driver_config.gpio_id[i]);
+	for (i = 0; i < snescon_config.gpio_id_cnt; ++i) {
+		snescon_config.pads_cfg.gpio[i] = gpio_get_bit(snescon_config.gpio_id[i]);
 	}
 
 	// Set up the gpio handler.
@@ -667,7 +667,7 @@ static int __init driver_init(void) {
 		return -EBUSY;
 	}
 
-	status = pads_setup(&driver_config.pads_cfg);
+	status = pads_setup(&snescon_config.pads_cfg);
 	if (status != 0) {
 		pr_err("Setup of input_device failed!\n");
 
@@ -678,25 +678,25 @@ static int __init driver_init(void) {
 	}
 
 	// Initiate the mutex and the timer
-	mutex_init(&driver_config.mutex);
-	setup_timer(&driver_config.timer, driver_timer, (long) &driver_config);
+	mutex_init(&snescon_config.mutex);
+	setup_timer(&snescon_config.timer, snescon_timer, (long) &snescon_config);
 
-	pr_info("Loaded driver\n");
+	pr_info("Loaded snescon\n");
 
 	return 0;
 }
 
 /**
- * Exit function for the driver.
+ * Exit function for the snescon.
  */
-static void __exit driver_exit(void) {
-	del_timer(&driver_config.timer);
-	pads_remove(&driver_config.pads_cfg);
-	mutex_destroy(&driver_config.mutex);
+static void __exit snescon_exit(void) {
+	del_timer(&snescon_config.timer);
+	pads_remove(&snescon_config.pads_cfg);
+	mutex_destroy(&snescon_config.mutex);
 	gpio_exit();
 
-	pr_info("driver exit\n");
+	pr_info("snescon exit\n");
 }
 
-module_init (driver_init);
-module_exit (driver_exit);
+module_init (snescon_init);
+module_exit (snescon_exit);
