@@ -51,7 +51,8 @@ static volatile unsigned *gpio;	// I/O access.
 #define GPIO_SET *(gpio + 7)	// Sets bits which are 1 and ignores bits which are 0.
 #define GPIO_CLR *(gpio + 10)	// Clears bits which are 1 and ignores bits which are 0.
 
-#define GPIO_BASE                (BCM2708_PERI_BASE + 0x200000) // GPIO controller.
+#define BCM2836_PERI_BASE		0x3F000000
+#define GPIO_BASE               (BCM2836_PERI_BASE + 0x200000) // GPIO controller.
 
 /*
  * All valid GPIOs found on the Raspberry Pi P1 Header.
