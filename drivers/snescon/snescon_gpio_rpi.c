@@ -749,8 +749,8 @@ static struct snescon_config snescon_config = {
 	.pads_cfg.device_name = "SNES pad",
 	.pads_cfg.open = &snescon_open,
 	.pads_cfg.close = &snescon_close,
-	.pads_cfg.multitap_enabled = 1,
-	.pads_cfg.fourscore_enabled = 1,
+	.pads_cfg.multitap_enabled = 0,
+	.pads_cfg.fourscore_enabled = 0,
 };
 
 /**
@@ -763,13 +763,13 @@ MODULE_PARM_DESC(gpio, "Mapping of the 6 gpio for the driver are as follow: <clk
  * @brief Definition of module parameter multitap_enabled. This parameter are readable and writable from the sysfs.
  */
 module_param_named(multitap, snescon_config.pads_cfg.multitap_enabled, bool, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(multitap, "Enable/disable multitap. (Enabled by default.)");
+MODULE_PARM_DESC(multitap, "Enable/disable multitap. (Disabled by default.)");
 
 /**
  * @brief Definition of module parameter fourscore_enabled. This parameter are readable and writable from the sysfs.
  */
 module_param_named(fourscore, snescon_config.pads_cfg.fourscore_enabled, bool, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(en_fourscore, "Enable/disable fourscore. (Enabled by default.)");
+MODULE_PARM_DESC(en_fourscore, "Enable/disable fourscore. (Disabled by default.)");
 
 /**
  * Init function for the driver.
